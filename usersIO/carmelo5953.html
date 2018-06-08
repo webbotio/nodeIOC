@@ -1,0 +1,1182 @@
+<script>function loadWorkspace(){xml_text='<xml xmlns="http://www.w3.org/1999/xhtml"><variables></variables><block type="steps" id="f_/sW6uq2q=S*`#15efE" x="39" y="43"><field name="N">1</field><field name="dir">avanti</field><next><block type="engine_on" id="-)xXlTuP`bjPg_.!:D+G"><field name="dir">avanti</field></block></next></block></xml>';dom=Blockly.Xml.textToDom(xml_text);Blockly.Xml.domToWorkspace(dom,workspace);scrollX=7.000000000000114;scrollY=7.000000000000114;}</script><!-- Non cancellare questo commento -->
+
+
+<script>
+//  Se i cookie sono disattivati, viene visualizzata la pagina di login
+//  con il messaggio "Attiva i cookie altrimenti il sistema non funziona".
+//
+//  Se non c'e' il cookie 'connessione', viene visualizzata la pagina di login
+//  con il messaggio "Per accedere al sistema devi fare il login".
+
+function cookieAttivati() {
+    document.cookie = 'verifica_cookie';
+    var testcookie = (document.cookie.indexOf('verifica_cookie')!=-1) ? true : false;
+    return testcookie;
+}
+function scriviCookie(nomeCookie,valoreCookie,durataCookie) {
+    var scadenza = new Date();
+    var adesso = new Date();
+    scadenza.setTime(adesso.getTime() + (parseInt(durataCookie)*1000));
+    document.cookie = nomeCookie + '=' + escape(valoreCookie) + '; expires=' + scadenza.toGMTString() + '; path = /';
+}
+function cancellaCookie(nomeCookie) {
+    scriviCookie(nomeCookie,'',-1);
+}
+var socket;
+if (!cookieAttivati()) window.location="../loginIO.html";
+if (document.cookie.indexOf('connessione')==-1) {
+    var messaggio = "Per accedere al sistema devi fare il login";
+    scriviCookie('messaggio',messaggio,60);
+    window.location="../loginIO.html";
+} else {
+    cancellaCookie('connessione');
+}
+</script>
+
+<span style="margin-left:10px;">WebBot</span>
+
+<input type="button" value="Blocks" style="margin-left:10px;" onclick="blocchi();" />
+<input type="button" value="Javascript" onclick="codicejavascript();" />
+
+<!--
+<input type="button" value="Python" onclick="codicepython();" />
+<input type="button" value="Php" onclick="codicephp();" />
+<input type="button" value="Lua" onclick="codicelua();" />
+<input type="button" value="Dart" onclick="codicedart();" />
+-->
+
+<input type="button" value="Xml" onclick="codicexml();" />
+<input type="button" value="Save" onclick="salva();" />
+<input type="button" value="Run!" id="run" style="display:none;" onclick="doFunction();" />
+<input type="button" value="Connettiti al robot!" id="connettiti" onclick="connettiti();" />
+<input type="button" value="Disconnettiti dal robot!" id="disconnettiti" style="display:none;" onclick="disconnettiti();" />
+<input type="button" value="Logout" onclick="logout();" />
+
+<span id="mensaje" style="margin-left:10px; color:#0A2751"></span>
+<div id="nomeUtente" style="float:right; margin-right:20px;"></div>
+
+<script src="../node_modules/socket.io-client/dist/socket.io.js"></script>
+<script>
+
+// Impedisce all'utente di usare il bottone "back" per ritornare alle pagine precedenti,
+// altrimenti uscirebbe dal sistema.
+
+var history_api = typeof history.pushState!=='undefined';
+if (history_api) history.pushState(null,'','#no-back'); else location.hash = '#no-back';
+if (history_api) history.pushState(null,'','#stay'); else location.hash = '#stay';
+window.onhashchange = function() {
+    if (location.hash == '#no-back' ) {
+        alert("Se torni indietro, esci dal sistema !\n\nSe vuoi uscire, premi il bottone ' Logout '.");
+        if (history_api) history.pushState(null,'','#stay'); else location.hash = '#stay';
+    }
+}
+
+// Viene attivata una comunicazione in tempo reale e bidirezionale tra client e server.
+
+var utente = usuario();
+var socket = io();
+
+// Comunica al server il nome dell'utente che ha fatto il login e controlla se in users.txt
+// e' presente un "#" o un "*" dopo il nome del file dell'utente.
+// Se non c'e' nessuno dei due, viene messo un "#".
+
+socket.emit('login',utente);
+
+// Se il robot e' libero, connette l'utente al robot e comunica il suo nome agli altri client.
+// Se il robot e' occupato, scrive il nome dell'utente connesso al robot.
+
+connettiti();
+
+socket.on('utenteConnesso', function(data){
+    var colore = 'green';
+    utente = usuario();
+    if ((data.utenteConnesso!='')&&(utente.nome!=data.utenteConnesso)) colore = 'red';
+    document.getElementById("nomeUtente").style.color = colore;
+    document.getElementById("nomeUtente").innerHTML = data.testo + data.utenteConnesso;
+});
+
+// Funzione che restituisce il nome dell'utente e il nome del file html utilizzato dall'utente. 
+
+function usuario() {
+var path = window.location.pathname;
+var filename = path.substr(path.lastIndexOf('/')+1);
+var fineNome = -4 + filename.indexOf('.html');
+var nombreU = filename.substring(0,fineNome);
+return {nome:nombreU,file:filename};
+}
+
+// Funzione che realizza la connessione al robot.
+
+function connettiti() {
+
+    utente = usuario();
+    var utenti;
+
+    var request = new XMLHttpRequest(); 
+    var strText = "var contents=fs.readFileSync('./usersIO/users.txt').toString(); res.write(contents); res.end();";
+    request.onreadystatechange = function() {
+        if (request.readyState == 4) {
+            utenti=request.responseText;
+        }
+    }
+    request.open("POST","",false);
+    request.send("script=" + encodeURIComponent(strText));
+
+    var posAttivo = utenti.indexOf(".html*");
+    var utenteAttivo;
+    if (posAttivo!=-1) {
+        var utenti0 = utenti.substring(0,posAttivo);
+        var inizioPosAttivo = 9 + utenti0.lastIndexOf("filename:");
+        var finePosAttivo = posAttivo - 4;
+        utenteAttivo = utenti0.substring(inizioPosAttivo,finePosAttivo);
+        if (utenteAttivo == utente.nome) col='green'; else col='red';
+        document.getElementById("nomeUtente").style.color = col;
+        document.getElementById("nomeUtente").innerHTML = 'Utente connesso al robot: '+utenteAttivo;
+    } else {
+        socket.emit('connessioneRobot',utente);
+        utenteAttivo = utente.nome;
+    }
+    if (utenteAttivo == utente.nome) {
+        document.getElementById("run").style.display="inline";
+        document.getElementById("connettiti").style.display="none";
+        document.getElementById("disconnettiti").style.display="inline";
+    }
+}
+
+// Se l'utente preme il bottone "Disconnettiti", rimane comunque nel sistema,
+// ma non e' piu' connesso al robot.
+
+function disconnettiti() {
+    document.getElementById("run").style.display="none";
+    document.getElementById("connettiti").style.display="inline";
+    document.getElementById("disconnettiti").style.display="none";
+    utente = usuario();
+    socket.emit('disconnessioneRobot',utente);
+}
+
+// Se l'utente chiude la pagina oppure preme il bottone 'Logout', esce dal sistema,
+// ma prima viene salvato il contenuto del suo workspace.
+
+function logout() {
+    window.location="../loginIO.html";
+}
+
+window.onbeforeunload = function() {
+    salva();
+    if (socket) {
+        scriviCookie('connessione','accesso',10);
+        utente = usuario();
+        socket.emit('logout',utente);
+    }
+}
+
+</script>
+
+
+<!-- css -->
+<style>
+    html, body {
+      height: 98%;
+      margin: 0;
+    }
+    body {
+      background-color: #fff;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    h1 {
+      font-weight: normal;
+      font-size: 140%;
+    }
+    table {
+      height: 100%;
+      width: 100%;
+    }
+    #blocklyArea {
+      margin: 100px 100px;
+      height: 100%;
+      background: #fc9;
+      text-align: center;
+    }
+    #textareaCodice {
+      border:2px solid #999999;
+      width:99%;
+      height:98%;
+      margin:5px 5px;
+      padding:10px;
+      position:relative;
+      resize:none;
+      display:none;
+    }
+</style>
+
+
+<!-- blockly scripts -->
+<script src="../blockly/blockly_compressed.js"></script>
+<script src="../blockly/blocks_compressed.js"></script>
+<script src="../blockly/javascript_compressed.js"></script>
+<script src="../blockly/msg/js/en.js"></script>
+<script src="../blockly/campoColore.js"></script>
+
+<!--
+<script src="../blockly/python_compressed.js"></script>
+<script src="../blockly/php_compressed.js"></script>
+<script src="../blockly/lua_compressed.js"></script>
+<script src="../blockly/dart_compressed.js"></script>
+-->
+
+
+<!-- definizione dei blocchi -->
+<script>
+
+    // ======== MOVIMENTO ==========================================================
+
+    // -------- blocco steps: esegue N passi nella direzione specificata -----------
+
+    Blockly.Blocks['steps'] = {
+      init: function() {
+        var numbers = [['1 passo','1'], ['2 passi', '2'], ['3 passi', '3'], ['4 passi', '4'], ['5 passi', '5']];
+        var directions = [['avanti', 'avanti'], ['indietro', 'indietro']];
+        this.appendDummyInput()
+            .appendField("Fai")
+            .appendField(new Blockly.FieldDropdown(numbers), 'N')
+            .appendField(new Blockly.FieldDropdown(directions), 'dir');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(20);
+        this.setTooltip("Esegue il numero di passi indicato nella direzione specificata");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['steps'] = function(block) {
+      var n = block.getFieldValue('N');
+      var dir = block.getFieldValue('dir');
+      var code = "doSteps(" + n + ",'" + dir + "');\n";
+      return code;
+    };
+
+
+    // ---------- blocco engine_on: accende i motori nella direzione specificata ---------------------
+
+    Blockly.Blocks['engine_on'] = {
+      init: function() {
+        var directions = [['avanti', 'avanti'], ['indietro', 'indietro']];
+        this.appendDummyInput()
+            .appendField("Vai")
+            .appendField(new Blockly.FieldDropdown(directions), 'dir');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(20);
+        this.setTooltip("Attiva i motori per muoversi nella direzione specificata");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['engine_on'] = function(block) {
+      var dir = block.getFieldValue('dir');
+      var code = "engineOn('" + dir + "');\n";
+      return code;
+    };
+
+
+    // ---------- blocco gira: accende i motori in modo che il robot giri a destra o a sinistra di 90 gradi -----------
+
+    Blockly.Blocks['gira'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Gira a ")
+            .appendField(new Blockly.FieldDropdown([["destra","destra"], ["sinistra","sinistra"]]), "dir")
+            .appendField(" di 90 gradi");
+        this.setInputsInline(true);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(20);
+        this.setTooltip("Gira a destra o a sinistra");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['gira'] = function(block) {
+      var dir = block.getFieldValue('dir');
+      var code = "gira('" + dir + "');\n";
+      return code;
+    };
+
+
+    // ---------- blocco gira_tempo: gira a destra o a sinistra per un certo tempo ------------
+
+    Blockly.Blocks['gira_tempo'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Gira a ")
+            .appendField(new Blockly.FieldDropdown([["destra","destra"], ["sinistra","sinistra"]]), "dir")
+            .appendField("per ")
+            .appendField(new Blockly.FieldNumber(1000), "tempo")
+            .appendField("ms");
+        this.setInputsInline(true);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(20);
+        this.setTooltip("");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['gira_tempo'] = function(block) {
+      var dir = block.getFieldValue('dir');
+      var tempo = block.getFieldValue('tempo');
+      var code = "giraTempo('" + dir + "'," + tempo + ");\n";
+      return code;
+    };
+
+
+    // ---------- blocco delay: attende il tempo specificato ---------------------
+
+    Blockly.Blocks['delay'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Aspetta")
+            .appendField(new Blockly.FieldNumber(0), "N")
+            .appendField("ms");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(20);
+        this.setTooltip("Aspetta il tempo specificato");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['delay'] = function(block) {
+      var n = block.getFieldValue('N');
+      var code = 'delay(' + n + ');\n';
+      return code;
+    };
+
+
+    // ---------- blocco delay_variable: attende il tempo in ms specificato da una variabile ------------
+
+    Blockly.Blocks['delay_variable'] = {
+      init: function() {
+        this.appendValueInput("tempo")
+            .setCheck("Number")
+            .appendField("Aspetta");
+        this.appendDummyInput()
+            .appendField("ms");
+        this.setInputsInline(true);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(20);
+        this.setTooltip("Aspetta il tempo in ms indicato da una variabile");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['delay_variable'] = function(block) {
+      var tempo = Blockly.JavaScript.valueToCode(block, 'tempo', Blockly.JavaScript.ORDER_ATOMIC);
+      var code = 'delayVariable('+tempo+');\n';
+      return code;
+    };
+
+
+    // ---------- blocco engine_off: spegne i motori ---------------------
+
+    Blockly.Blocks['engine_off'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Fermati");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(20);
+        this.setTooltip("Spegne i motori");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['engine_off'] = function(block) {
+      var code = 'engineOff();\n';
+      return code;
+    };
+
+
+    // ---------- blocco engine_on_pwm: accende i motori nella direzione specificata per un certo tempo con una velocita' inferiore a quella massima
+
+    Blockly.Blocks['engine_on_pwm'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Vai")
+            .appendField(new Blockly.FieldDropdown([["avanti","avanti"], ["indietro","indietro"]]), "dir")
+            .appendField("per")
+            .appendField(new Blockly.FieldNumber(1000, 0), "time")
+            .appendField("ms  con il")
+            .appendField(new Blockly.FieldNumber(50, 0, 100), "percentage")
+            .appendField("%  della velocit\u00E0 massima");
+        this.setInputsInline(true);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(20);
+        this.setTooltip("Attiva i motori nella direzione specificata per un certo tempo con una velocit\u00E0 inferiore a quella massima");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['engine_on_pwm'] = function(block) {
+      var dir = block.getFieldValue('dir');
+      var time = block.getFieldValue('time');
+      var percentage = block.getFieldValue('percentage');
+      var code = "engineOnPWM('" + dir + "'," + time + "," + percentage + ");\n";
+      return code;
+    };
+
+
+    // ======== ASPETTO ==========================================================
+
+
+    Blockly.Blocks['accendi_led'] = {
+      init: function() {
+        var numbers = [['1','1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']];
+        this.appendDummyInput()
+            .appendField("Accendi il led")
+            .appendField(new Blockly.FieldDropdown(numbers), 'N')
+            .appendField("colore")
+            .appendField(new Blockly.CampoColore("#ff0000"), "color");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(20);
+        this.setTooltip("Accende il led specificato");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['accendi_led'] = function(block) {
+      var N = block.getFieldValue('N');
+      var color = block.getFieldValue('color');
+      var code = "accendiLed("+N+",'"+color+"');\n";
+      return code;
+    };
+
+
+    // ======== SENSORI ==========================================================
+
+    // ------------ blocco dist_sensor: restituisce la distanza letta dal sensore ----------------------
+
+
+    Blockly.Blocks['dist_sensor'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Misura la distanza con il sensore 'avanti'");
+        this.setOutput(true, "String");
+        this.setColour(230);
+        this.setTooltip("Misura la distanza con il sensore 'avanti'");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['dist_sensor'] = function(block) {
+      var id = 'avanti';
+      var code = "distSensor('" + id + "')";
+      return [code, Blockly.JavaScript.ORDER_ATOMIC];
+    };
+
+
+    // ------------ blocco dist_sensore_rotante: restituisce la distanza letta dal sensore rotante ----------------
+
+
+    Blockly.Blocks['dist_sensore_rotante'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Misura la distanza con il sensore 'rotante'");
+        this.setOutput(true, "String");
+        this.setColour(230);
+        this.setTooltip("Misura la distanza con il sensore 'rotante'");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['dist_sensore_rotante'] = function(block) {
+    var id = 'rotante';
+    var code = "distSensor('" + id + "')";
+    return [code, Blockly.JavaScript.ORDER_ATOMIC];
+    };
+
+
+    // ------------ blocco color_sensor: restituisce il colore letto dal sensore ----------------------
+
+
+    Blockly.Blocks['color_sensor'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Leggi il sensore di colore n\u00B0")
+            .appendField(new Blockly.FieldDropdown([["1","1"], ["2","2"], ["3","3"]]), "id");
+        this.setInputsInline(true);
+        this.setOutput(true, "String");
+        this.setColour(230);
+        this.setTooltip("Leggi il sensore di colore specificato");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['color_sensor'] = function(block) {
+      var id = block.getFieldValue('id');
+      var code = 'colorSensor(' + id + ')';
+      return [code, Blockly.JavaScript.ORDER_ATOMIC];
+    };
+
+
+    // ------------ blocco guarda_verso: dispone il sensore rotante di distanza verso una direzione ----------------------
+
+
+    Blockly.Blocks['guarda_verso'] = {
+      init: function() {
+        this.appendDummyInput()
+            .appendField("Guarda")
+            .appendField(new Blockly.FieldDropdown([["avanti","avanti"], ["verso destra","destra"], ["verso sinistra","sinistra"]]), "direzione");
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(230);
+        this.setTooltip("Guarda verso una direzione");
+       this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['guarda_verso'] = function(block) {
+      var direzione = block.getFieldValue('direzione');
+      var code = "guardaVerso('" + direzione + "');\n";
+      return code;
+    };
+
+
+    // ======== BLOCCHI PERSONALIZZATI DELLA CATEGORIA TEXT ==================================
+
+    // ------------ blocco write: scrive sulla console del server un risultato numerico e/o testuale -------------------
+
+    Blockly.Blocks['write'] = {
+      init: function() {
+        this.appendValueInput("NAME")
+            .setCheck(null)
+            .appendField("write");
+        this.setInputsInline(false);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(165);
+        this.setTooltip("Visualizza un dato");
+        this.setHelpUrl("");
+      }
+    };
+
+    Blockly.JavaScript['write'] = function(block) {
+        var value=Blockly.JavaScript.valueToCode(block,'NAME',Blockly.JavaScript.ORDER_ATOMIC);
+        var code = 'console.log('+value+');\n';
+        return code;
+    };
+
+
+</script>
+
+<!-- area del workspace -->
+
+<div id="blocklyDiv" style="position: absolute;" ></div>
+<div><textarea id="textareaCodice" readonly='true'></textarea></div>
+<table>
+<tr>
+  <td id="blocklyArea">
+    Blockly will be positioned here.
+  </td>
+</tr>
+</table>
+
+
+<!-- configura la tool box -->
+<xml xmlns="http://www.w3.org/1999/xhtml" id="toolbox" style="display: none;">
+
+    <category name="Movimento" colour="#000000">
+      <block type="steps">
+        <field name="N">1</field>
+        <field name="dir">avanti</field>
+      </block>
+      <block type="engine_on">
+        <field name="dir">avanti</field>
+      </block>
+      <block type="gira">
+        <field name="dir">destra</field>
+      </block>
+      <block type="gira_tempo">
+        <field name="dir">destra</field>
+        <field name="tempo">1000</field>
+      </block>
+      <block type="delay">
+        <field name="N">1000</field>
+      </block>
+      <block type="delay_variable">
+      </block>
+      <block type="engine_off">
+      </block>
+      <block type="engine_on_pwm">
+        <field name="dir">avanti</field>
+        <field name="time">1000</field>
+        <field name="percentage">50</field>
+      </block>
+    </category>
+
+    <category name="Aspetto" colour="#000000">
+      <block type="accendi_led">
+        <field name="N">1</field>
+      </block>
+    </category>
+
+    <category name="Sensori" colour="#000000">
+      <block type="dist_sensor">
+      </block>
+      <block type="dist_sensore_rotante">
+      </block>
+      <block type="color_sensor">
+        <field name="id">1</field>
+      </block>
+      <block type="guarda_verso">
+        <field name="direzione">avanti</field>
+      </block>
+    </category>
+
+  <sep></sep>
+  <category name="Logic" colour="#5C81A6">
+    <block type="controls_if"></block>
+    <block type="logic_compare">
+      <field name="OP">EQ</field>
+    </block>
+    <block type="logic_operation">
+      <field name="OP">AND</field>
+    </block>
+    <block type="logic_negate"></block>
+    <block type="logic_boolean">
+      <field name="BOOL">TRUE</field>
+    </block>
+    <block type="logic_null"></block>
+    <block type="logic_ternary"></block>
+  </category>  
+  <category name="Loops" colour="#5CA65C">
+    <block type="controls_repeat_ext">
+      <value name="TIMES">
+        <shadow type="math_number">
+          <field name="NUM">10</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="controls_whileUntil">
+      <field name="MODE">WHILE</field>
+    </block>
+    <block type="controls_for">
+      <field name="VAR" id="6rQxV[85`lywAXkf,Th@" variabletype="">i</field>
+      <value name="FROM">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+      <value name="TO">
+        <shadow type="math_number">
+          <field name="NUM">10</field>
+        </shadow>
+      </value>
+      <value name="BY">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="controls_forEach">
+      <field name="VAR" id="){suONkqp8cw$9~`u+_2" variabletype="">j</field>
+    </block>
+    <block type="controls_flow_statements">
+      <field name="FLOW">BREAK</field>
+    </block>
+  </category>
+  <category name="Math" colour="#5C68A6">
+    <block type="math_number">
+      <field name="NUM">0</field>
+    </block>
+    <block type="math_arithmetic">
+      <field name="OP">ADD</field>
+      <value name="A">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+      <value name="B">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_single">
+      <field name="OP">ROOT</field>
+      <value name="NUM">
+        <shadow type="math_number">
+          <field name="NUM">9</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_trig">
+      <field name="OP">SIN</field>
+      <value name="NUM">
+        <shadow type="math_number">
+          <field name="NUM">45</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_constant">
+      <field name="CONSTANT">PI</field>
+    </block>
+    <block type="math_number_property">
+      <mutation divisor_input="false"></mutation>
+      <field name="PROPERTY">EVEN</field>
+      <value name="NUMBER_TO_CHECK">
+        <shadow type="math_number">
+          <field name="NUM">0</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_round">
+      <field name="OP">ROUND</field>
+      <value name="NUM">
+        <shadow type="math_number">
+          <field name="NUM">3.1</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_on_list">
+      <mutation op="SUM"></mutation>
+      <field name="OP">SUM</field>
+    </block>
+    <block type="math_modulo">
+      <value name="DIVIDEND">
+        <shadow type="math_number">
+          <field name="NUM">64</field>
+        </shadow>
+      </value>
+      <value name="DIVISOR">
+        <shadow type="math_number">
+          <field name="NUM">10</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_constrain">
+      <value name="VALUE">
+        <shadow type="math_number">
+          <field name="NUM">50</field>
+        </shadow>
+      </value>
+      <value name="LOW">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+      <value name="HIGH">
+        <shadow type="math_number">
+          <field name="NUM">100</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_random_int">
+      <value name="FROM">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+      <value name="TO">
+        <shadow type="math_number">
+          <field name="NUM">100</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_random_float"></block>
+  </category>
+  <category name="Text" colour="#5CA68D">
+    <block type="text">
+      <field name="TEXT"></field>
+    </block>
+    <block type="text_join">
+      <mutation items="2"></mutation>
+    </block>
+    <block type="text_append">
+      <field name="VAR" id="((O,3V5)T}.~aVxe~LVZ" variabletype="">item</field>
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT"></field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_length">
+      <value name="VALUE">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_isEmpty">
+      <value name="VALUE">
+        <shadow type="text">
+          <field name="TEXT"></field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_indexOf">
+      <field name="END">FIRST</field>
+      <value name="VALUE">
+        <block type="variables_get">
+          <field name="VAR" id="((S7:}xA^@im|B@~L_O," variabletype="">text</field>
+        </block>
+      </value>
+      <value name="FIND">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_charAt">
+      <mutation at="true"></mutation>
+      <field name="WHERE">FROM_START</field>
+      <value name="VALUE">
+        <block type="variables_get">
+          <field name="VAR" id="((S7:}xA^@im|B@~L_O," variabletype="">text</field>
+        </block>
+      </value>
+    </block>
+    <block type="text_getSubstring">
+      <mutation at1="true" at2="true"></mutation>
+      <field name="WHERE1">FROM_START</field>
+      <field name="WHERE2">FROM_START</field>
+      <value name="STRING">
+        <block type="variables_get">
+          <field name="VAR" id="((S7:}xA^@im|B@~L_O," variabletype="">text</field>
+        </block>
+      </value>
+    </block>
+    <block type="text_changeCase">
+      <field name="CASE">UPPERCASE</field>
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_trim">
+      <field name="MODE">BOTH</field>
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+
+    <block type="write">
+      <value name="NAME">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+
+    <block type="text_print">
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_prompt_ext">
+      <mutation type="TEXT"></mutation>
+      <field name="TYPE">TEXT</field>
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+  </category>
+  <category name="Lists" colour="#745CA6">
+    <block type="lists_create_with">
+      <mutation items="0"></mutation>
+    </block>
+    <block type="lists_create_with">
+      <mutation items="3"></mutation>
+    </block>
+    <block type="lists_repeat">
+      <value name="NUM">
+        <shadow type="math_number">
+          <field name="NUM">5</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="lists_length"></block>
+    <block type="lists_isEmpty"></block>
+    <block type="lists_indexOf">
+      <field name="END">FIRST</field>
+      <value name="VALUE">
+        <block type="variables_get">
+          <field name="VAR" id="!`.~nZg=RW4i]{L7S]ba" variabletype="">list</field>
+        </block>
+      </value>
+    </block>
+    <block type="lists_getIndex">
+      <mutation statement="false" at="true"></mutation>
+      <field name="MODE">GET</field>
+      <field name="WHERE">FROM_START</field>
+      <value name="VALUE">
+        <block type="variables_get">
+          <field name="VAR" id="!`.~nZg=RW4i]{L7S]ba" variabletype="">list</field>
+        </block>
+      </value>
+    </block>
+    <block type="lists_setIndex">
+      <mutation at="true"></mutation>
+      <field name="MODE">SET</field>
+      <field name="WHERE">FROM_START</field>
+      <value name="LIST">
+        <block type="variables_get">
+          <field name="VAR" id="!`.~nZg=RW4i]{L7S]ba" variabletype="">list</field>
+        </block>
+      </value>
+    </block>
+    <block type="lists_getSublist">
+      <mutation at1="true" at2="true"></mutation>
+      <field name="WHERE1">FROM_START</field>
+      <field name="WHERE2">FROM_START</field>
+      <value name="LIST">
+        <block type="variables_get">
+          <field name="VAR" id="!`.~nZg=RW4i]{L7S]ba" variabletype="">list</field>
+        </block>
+      </value>
+    </block>
+    <block type="lists_split">
+      <mutation mode="SPLIT"></mutation>
+      <field name="MODE">SPLIT</field>
+      <value name="DELIM">
+        <shadow type="text">
+          <field name="TEXT">,</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="lists_sort">
+      <field name="TYPE">NUMERIC</field>
+      <field name="DIRECTION">1</field>
+    </block>
+  </category>
+  <category name="Colour" colour="#A6745C">
+    <block type="colour_picker">
+      <field name="COLOUR">#ff0000</field>
+    </block>
+    <block type="colour_random"></block>
+    <block type="colour_rgb">
+      <value name="RED">
+        <shadow type="math_number">
+          <field name="NUM">100</field>
+        </shadow>
+      </value>
+      <value name="GREEN">
+        <shadow type="math_number">
+          <field name="NUM">50</field>
+        </shadow>
+      </value>
+      <value name="BLUE">
+        <shadow type="math_number">
+          <field name="NUM">0</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="colour_blend">
+      <value name="COLOUR1">
+        <shadow type="colour_picker">
+          <field name="COLOUR">#ff0000</field>
+        </shadow>
+      </value>
+      <value name="COLOUR2">
+        <shadow type="colour_picker">
+          <field name="COLOUR">#3333ff</field>
+        </shadow>
+      </value>
+      <value name="RATIO">
+        <shadow type="math_number">
+          <field name="NUM">0.5</field>
+        </shadow>
+      </value>
+    </block>
+  </category>
+  <sep></sep>
+  <category name="Variables" colour="#A65C81" custom="VARIABLE"></category>
+  <category name="Functions" colour="#9A5CA6" custom="PROCEDURE"></category>
+</xml>
+
+
+<script>
+
+    var toolbox = document.getElementById("toolbox");
+
+    var options = {
+        toolbox : toolbox,
+        collapse : true,
+        comments : true,
+        disable : true,
+        maxBlocks : Infinity,
+        trashcan : true,
+        horizontalLayout : false,
+        toolboxPosition : 'start',
+        css : true,
+        media : '../blockly/media/',
+        rtl : false,
+        scrollbars : true,
+        sounds : true,
+        oneBasedIndex : true,
+        grid : {
+            spacing : 20,
+            length : 1,
+            colour : '#888',
+            snap : false
+        },
+        zoom : {
+            controls : true,
+            wheel : true,
+            startScale : 1,
+            maxScale : 3,
+            minScale : 0.3,
+            scaleSpeed : 1.2
+        }
+    };
+
+    var blocklyArea = document.getElementById('blocklyArea');
+    var blocklyDiv = document.getElementById('blocklyDiv');
+
+    var workspace = Blockly.inject('blocklyDiv', options);
+    var scrollX,scrollY;
+
+    try { loadWorkspace(); } catch (e) {}
+
+
+    var onresize = function(e) {
+        // Compute the absolute coordinates and dimensions of blocklyArea.
+        var element = blocklyArea;
+        var x = 0;
+        var y = 0;
+        do {
+            x += element.offsetLeft;
+            y += element.offsetTop;
+            element = element.offsetParent;
+        } while (element);
+
+        // Position blocklyDiv over blocklyArea.
+        blocklyDiv.style.left = x + 'px';
+        blocklyDiv.style.top = y + 'px';
+        blocklyDiv.style.width = blocklyArea.offsetWidth + 'px';
+        blocklyDiv.style.height = blocklyArea.offsetHeight + 'px';
+    };
+
+    window.addEventListener('resize', onresize, false);
+    onresize();
+    Blockly.svgResize(workspace);
+
+    try {
+        metrics=Blockly.mainWorkspace.getMetrics();
+        xx=-scrollX-metrics.contentLeft;
+        yy=-scrollY-metrics.contentTop;
+        Blockly.mainWorkspace.scrollbar.set(xx,yy);
+    }
+    catch (e) {}
+
+
+    function salva() {
+        var code = Blockly.JavaScript.workspaceToCode(workspace);
+        var xml = Blockly.Xml.workspaceToDom(workspace);
+        var xml_text = Blockly.Xml.domToText(xml);
+        xml_text = xml_text.replace(/"/g, '\\"');
+        var scrollbarX=Blockly.mainWorkspace.scrollX;
+        var scrollbarY=Blockly.mainWorkspace.scrollY;
+        var aggiorna ="<scr"+"ipt>function loadWorkspace(){xml_text='"+xml_text+"';";
+        aggiorna+="dom=Blockly.Xml.textToDom(xml_text);";
+        aggiorna+="Blockly.Xml.domToWorkspace(dom,workspace);";
+        aggiorna+="scrollX="+scrollbarX+";";
+        aggiorna+="scrollY="+scrollbarY+";";
+        aggiorna+="}</scr"+"ipt>";
+        var url = window.location.pathname;
+        var userfile = url.substring(url.indexOf('/')+1);
+
+        var request = new XMLHttpRequest();
+        var strText = "var oldContents=fs.readFileSync('"+userfile+"').toString(); var inizio=oldContents.indexOf('<!-- Non cancellare questo commento -->'); oldContents=oldContents.substr(inizio); var contents=\""+aggiorna+"\"; contents+=oldContents; fs.writeFileSync('"+userfile+"',contents); console.log('The file \""+userfile+"\" was saved!'); res.end();";
+
+        request.onreadystatechange = function() {
+            if (request.readyState == 4) {
+               // console.log(request.responseText);
+            }
+        }
+	request.open("POST","",false);
+        request.send("script=" + encodeURIComponent(strText));
+        document.getElementById("mensaje").innerHTML="Save eseguito";
+        setTimeout("document.getElementById('mensaje').innerHTML='';",3000);
+    }
+
+
+    function doFunction() {
+        var code = Blockly.JavaScript.workspaceToCode(workspace);
+        var request = new XMLHttpRequest();
+        var strText = code+"res.end();";
+
+        request.onreadystatechange = function() {
+            if (request.readyState == 4) {
+                // console.log(request.responseText);
+            }
+        }
+	request.open("POST","",false);
+        request.send("script=" + encodeURIComponent(strText));
+        document.getElementById("mensaje").innerHTML="Run eseguito";
+        setTimeout("document.getElementById('mensaje').innerHTML='';",3000);
+    }
+
+
+    function blocchi() {
+        document.getElementById('blocklyDiv').style.display="block";
+        document.getElementsByClassName("blocklyWidgetDiv")[0].style.display="block";
+        document.getElementById('textareaCodice').style.display="none";
+    }
+
+    function visualizzaCodice(codice,linguaggio) {
+        document.getElementById('textareaCodice').innerHTML="\n  "+linguaggio+" CODE\n\n\n"+codice;
+        document.getElementsByClassName("blocklyWidgetDiv")[0].style.display="none";
+        document.getElementById('blocklyDiv').style.display="none";
+        document.getElementById('textareaCodice').style.display="block";
+    }
+
+    function codicejavascript() {
+        var code = Blockly.JavaScript.workspaceToCode(workspace);
+        var language = "JAVASCRIPT";
+        visualizzaCodice(code,language);
+    }
+
+    function codicepython() {
+        var code = Blockly.Python.workspaceToCode(workspace);
+        var language = "PYTHON";
+        visualizzaCodice(code,language);
+    }
+
+    function codicephp() {
+        var code = Blockly.PHP.workspaceToCode(workspace);
+        var language = "PHP";
+        visualizzaCodice(code,language);
+    }
+
+    function codicelua() {
+        var code = Blockly.Lua.workspaceToCode(workspace);
+        var language = "LUA";
+        visualizzaCodice(code,language);
+    }
+
+    function codicedart() {
+        var code = Blockly.Dart.workspaceToCode(workspace);
+        var language = "DART";
+        visualizzaCodice(code,language);
+    }
+
+    function codicexml() {
+        var code = Blockly.Xml.workspaceToDom(workspace);
+        code =Blockly.Xml.domToPrettyText(code);
+        var language = "XML";
+        visualizzaCodice(code,language);
+    }
+
+</script>
