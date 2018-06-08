@@ -1,0 +1,162 @@
+﻿<html>
+<head>
+  <meta charset="UTF-8">
+  <title>WebBot sign up</title>
+  <link href="./cssIO/style.css" rel="stylesheet" type="text/css"></link>
+</head>
+
+<body>
+  <div class="login">
+  <h2>WebBot&nbsp;&nbsp;sign up</h2>
+  <div id="error" class="error0"></div>
+  <fieldset>
+    <h4>Username:</h4><input type="username" id="username" placeholder="Username"/>
+    <h4>Password:</h4><input type="password" id="password" placeholder="Password" />
+  </fieldset>
+  <input type="button" value="Sign up" onclick="registra();" />
+  <div class="utilities">
+    <a href="./loginIO.html">Login &rarr;</a>
+  </div>
+  </div>
+</body>
+</html>
+
+<script>
+function cookieAttivati() {
+   document.cookie = 'verifica_cookie';
+   var testcookie = (document.cookie.indexOf('verifica_cookie')!=-1) ? true : false;
+   return testcookie;
+}
+function scriviCookie(nomeCookie,valoreCookie,durataCookie) {
+   var scadenza = new Date();
+   var adesso = new Date();
+   scadenza.setTime(adesso.getTime() + (parseInt(durataCookie)*60000));
+   document.cookie = nomeCookie + '=' + escape(valoreCookie) + '; expires=' + scadenza.toGMTString() + '; path = /';
+}
+function cancellaCookie(nomeCookie) {
+   scriviCookie(nomeCookie,'',-1);
+}
+if (!cookieAttivati()) {
+   document.getElementById("error").innerHTML="Attiva i cookie altrimenti il sistema non funziona";
+   document.getElementById("error").className="error1";
+}
+if (document.cookie.indexOf('connessione')!=-1) cancellaCookie('connessione');
+
+function registra() {
+   document.getElementById("error").className="error0";
+   if (!cookieAttivati()) {
+       document.getElementById("error").innerHTML="Attiva i cookie altrimenti il sistema non funziona";
+       document.getElementById("error").className="error1";
+       document.getElementById("username").value="";
+       document.getElementById("password").value="";
+       return;
+   }
+   var username = document.getElementById("username").value;
+   var password = document.getElementById("password").value;
+   var utenti;
+   var regexp = /^[a-zA-Z0-9]*$/;
+   if (!regexp.test(username) || !regexp.test(password))
+    {
+       document.getElementById("error").innerHTML="Puoi usare solo caratteri alfanumerici";
+       document.getElementById("error").className="error1";
+       document.getElementById("username").value="";
+       document.getElementById("password").value="";
+       return;
+    }
+   if (username=="") {
+       document.getElementById("error").innerHTML="Inserisci lo username";
+       document.getElementById("error").className="error1";
+       return;
+   }
+   if (password=="") {
+       document.getElementById("error").innerHTML="Inserisci la password";
+       document.getElementById("error").className="error1";
+       return;
+   }
+   if ((username.length<4)||(username.length>15)) {
+       document.getElementById("error").innerHTML="Il nome utente deve avere da 4 a 15 caratteri";
+       document.getElementById("error").className="error1";
+       document.getElementById("username").value="";
+       document.getElementById("password").value="";
+       return;
+   }
+   if ((password.length<4)||(password.length>15)) {
+       document.getElementById("error").innerHTML="La password deve avere da 4 a 15 caratteri";
+       document.getElementById("error").className="error1";
+       document.getElementById("username").value="";
+       document.getElementById("password").value="";
+       return;
+   }
+   var datiSignup = "username:"+username+",password:"+password;
+
+   var request = new XMLHttpRequest(); 
+   var strText = "var contents=fs.readFileSync('./usersIO/users.txt').toString(); res.write(contents); res.end();";
+   request.onreadystatechange = function() {
+      if (request.readyState == 4) {
+         utenti=request.responseText;
+      }
+   }
+   request.open("POST","",false);
+   request.send("script=" + encodeURIComponent(strText));
+
+   var pos = utenti.indexOf("username:"+username+",");
+   if (pos==-1) {
+       if (utenti=="") {
+           ultCodice = 0;
+       }
+       else {
+           posf=utenti.lastIndexOf(".html");
+           ultCodice = utenti.substring(posf-4,posf);
+       }
+       codice = generaCodice(ultCodice);
+       filename = username+codice+".html";
+       filename1 = filename+"#";
+       utenti +="{"+datiSignup+",filename:"+filename1+"}";
+
+       var request = new XMLHttpRequest();
+       var strText = "var utenti='"+utenti+"'; var username='"+username+"'; fs.writeFileSync('./usersIO/users.txt',utenti); console.log('The user '+username+' was registered!'); res.end();";
+       request.onreadystatechange = function() {
+           if (request.readyState == 4) {
+               // console.log(request.responseText);
+           }
+       }
+       request.open("POST","",false);
+       request.send("script=" + encodeURIComponent(strText));
+
+       var request = new XMLHttpRequest();
+       var strText = "var contents = fs.readFileSync('./usersIO/user.html').toString(); var inizio = contents.indexOf('<!-- Non cancellare questo commento -->'); contents = contents.substr(inizio); var filename='"+filename+"'; fs.writeFileSync('./usersIO/"+filename+"',contents); res.end();";
+       request.onreadystatechange = function() {
+           if (request.readyState == 4) {
+               // console.log(request.responseText);
+           }
+       }
+       request.open("POST","",false);
+       request.send("script=" + encodeURIComponent(strText));
+
+       document.getElementById("error").innerHTML="Ti sei registrato, adesso ti faccio entrare nel sistema";
+       document.getElementById("error").className="error1";
+       scriviCookie('connessione','accesso',60);
+       setTimeout('window.location="./usersIO/"+filename;',2000);
+   } else {
+       document.getElementById("error").innerHTML="Utente gi&agrave; registrato, inserisci un altro username";
+       document.getElementById("error").className="error1";
+   }
+   document.getElementById("username").value="";
+   document.getElementById("password").value="";
+}
+
+function generaCodice(i) {
+   if (i==0) {
+       r = 1+Math.floor(8998*Math.random());
+       codigo = 1;
+       for (i=1; i<=r; i++) {
+            codigo = (1468*codigo) % 8999;
+       }
+   }
+   else {
+       codigo = ((i-1000)*1468) % 8999;
+   }
+   codigo +=1000;
+   return codigo;
+}
+</script>
